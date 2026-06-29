@@ -26,6 +26,7 @@ enum QRBridge {
             process.executableURL = URL(fileURLWithPath: "/usr/bin/env")
             process.arguments = ["qr", "doctor"]
         }
+        process.environment = (ProcessInfo.processInfo.environment).merging(["NO_COLOR": "1"]) { _, new in new }
         process.standardOutput = pipe
         process.standardError = pipe
 
@@ -37,39 +38,39 @@ enum QRBridge {
 
         process.waitUntilExit()
         let data = pipe.fileHandleForReading.readDataToEndOfFile()
-        let output = String(data: data, encoding: .utf8) ?? ""
+        let output = stripANSI(String(data: data, encoding: .utf8) ?? "")
 
         var issueCount = 0
         var lines: [String] = []
 
         for line in output.split(separator: "\n", omittingEmptySubsequences: false) {
             let text = String(line).trimmingCharacters(in: .whitespaces)
-            if text.hasPrefix("✓") {
-                if lines.count < 6 { lines.append(text) }
-            } else if text.contains("warn") || text.contains("│") && text.contains("warn") {
-                issueCount += 1
+            if text.hasPrefix("✓"), lines.count < 6 {
+                lines.append(text)
             }
-        }
-
-        if lines.isEmpty {
-            lines = output.split(separator: "\n").prefix(8).map(String.init)
-        }
-
-        if issueCount == 0 {
-            for row in output.split(separator: "\n") {
-                let text = String(row)
-                if text.contains("│") && (text.contains(" warn ") || text.contains("│ warn")) {
+            if text.contains("│") {
+                let cells = text.split(separator: "│", omittingEmptySubsequences: false).map {
+                    String($0).trimmingCharacters(in: .whitespaces)
+                }
+                if cells.count >= 2, cells[1] == "warn" {
                     issueCount += 1
                 }
             }
         }
 
-        if issueCount == 0 && output.contains("待完善项") {
-            issueCount = output.components(separatedBy: "│ warn").count - 1
-            if issueCount < 0 { issueCount = 0 }
+        if lines.isEmpty {
+            lines = output.split(separator: "\n").prefix(8).map { stripANSI(String($0)) }
         }
 
-        return (max(issueCount, 0), Array(lines.prefix(8)))
+        return (issueCount, Array(lines.prefix(8)))
+    }
+
+    private static func stripANSI(_ text: String) -> String {
+        text.replacingOccurrences(
+            of: "\u{001B}\\[[0-9;]*[A-Za-z]",
+            with: "",
+            options: .regularExpression
+        )
     }
 
     private static func loadRecentNotes(limit: Int) -> [QRNoteEntry] {

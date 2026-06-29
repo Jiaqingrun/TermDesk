@@ -6,10 +6,10 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
 
     func applicationDidFinishLaunching(_ notification: Notification) {
         HotkeyManager.shared.onTogglePanel = { [weak self] in
-            FloatingPanelController.shared.toggle()
             if let store = self?.store {
                 FloatingPanelController.shared.attach(store: store)
             }
+            FloatingPanelController.shared.toggle()
         }
         HotkeyManager.shared.register()
     }
@@ -20,52 +20,163 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     }
 }
 
+private struct MenuBarIconView: View {
+    @ObservedObject var store: TermDeskStore
+
+    var body: some View {
+        Image(nsImage: MenuBarIconRenderer.makeImage(sys: store.snapshot.sys))
+    }
+}
+
 @main
 struct TermDeskApp: App {
     @NSApplicationDelegateAdaptor(AppDelegate.self) private var appDelegate
     @StateObject private var store = TermDeskStore()
+    @AppStorage("termdesk.menuBarCompact") private var menuBarCompact = TermDeskSettings.menuBarCompact
+    @AppStorage("termdesk.preferSysPeek") private var preferSysPeek = TermDeskSettings.preferSysPeekSnapshot
 
     var body: some Scene {
         MenuBarExtra {
-            DashboardView(store: store, compact: true)
-                .onAppear {
-                    store.panelOpen = true
-                    appDelegate.store = store
-                    FloatingPanelController.shared.attach(store: store)
+            if menuBarCompact {
+                CompactMenuBarView(store: store) {
+                    openFloatingPanel()
                 }
-                .onDisappear {
-                    store.panelOpen = false
-                }
+                .onAppear { store.panelOpen = true }
+                .onDisappear { store.panelOpen = false }
+            } else {
+                DashboardView(store: store, compact: true)
+                    .onAppear { panelDidOpen() }
+                    .onDisappear { store.panelOpen = false }
+            }
         } label: {
-            Image(systemName: "terminal.fill")
-                .symbolRenderingMode(.hierarchical)
+            MenuBarIconView(store: store)
         }
         .menuBarExtraStyle(.window)
 
         Settings {
-            Form {
-                Section("快捷键") {
-                    Text("⌘⇧` 打开/关闭悬浮控制台")
-                        .font(.caption)
-                }
-                Section("数据") {
-                    Text("快照：~/Library/Application Support/TermDesk/snapshot.json")
-                        .font(.caption2)
-                        .foregroundStyle(.secondary)
-                }
-                Section("关联") {
-                    Button("打开 QR Web") {
-                        NSWorkspace.shared.open(URL(string: "http://127.0.0.1:8765")!)
+            SettingsView(store: store, menuBarCompact: $menuBarCompact, preferSysPeek: $preferSysPeek)
+        }
+    }
+
+    private func panelDidOpen() {
+        store.panelOpen = true
+        appDelegate.store = store
+        FloatingPanelController.shared.attach(store: store)
+    }
+
+    private func openFloatingPanel() {
+        appDelegate.store = store
+        FloatingPanelController.shared.attach(store: store)
+        FloatingPanelController.shared.show()
+    }
+}
+
+private struct CompactMenuBarView: View {
+    @ObservedObject var store: TermDeskStore
+    let openFloating: () -> Void
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 12) {
+            Text("TermDesk")
+                .font(.headline)
+            Text("精简菜单栏模式")
+                .font(TermDeskTheme.monoSmall)
+                .foregroundStyle(TermDeskTheme.muted)
+            Button("打开悬浮控制台\t⌘⇧`") {
+                openFloating()
+            }
+            .keyboardShortcut("`", modifiers: [.command, .shift])
+            if let sys = store.snapshot.sys {
+                Text(String(format: "P %.0f%% · E %.0f%% · %@", sys.pCoreLoad, sys.eCoreLoad, sys.source))
+                    .font(TermDeskTheme.monoSmall)
+                    .foregroundStyle(.secondary)
+            }
+        }
+        .padding(16)
+        .frame(width: 260, alignment: .leading)
+        .background(TermDeskTheme.panelBackground)
+    }
+}
+
+private struct SettingsView: View {
+    @ObservedObject var store: TermDeskStore
+    @Binding var menuBarCompact: Bool
+    @Binding var preferSysPeek: Bool
+    @State private var loginItemEnabled = LoginItemManager.isEnabled
+    @State private var loginItemStatus = LoginItemManager.status.label
+    @State private var loginItemError: String?
+
+    var body: some View {
+        Form {
+            Section("登录项") {
+                Toggle("登录时打开 TermDesk", isOn: $loginItemEnabled)
+                    .onChange(of: loginItemEnabled) { _, enabled in
+                        updateLoginItem(enabled: enabled)
                     }
-                    Button("在 TermDesk 中打开完整面板") {
-                        FloatingPanelController.shared.attach(store: store)
-                        FloatingPanelController.shared.show()
-                    }
+                Text("状态：\(loginItemStatus)")
+                    .font(.caption)
+                    .foregroundStyle(.secondary)
+                if let loginItemError {
+                    Text(loginItemError).font(.caption).foregroundStyle(.red)
+                }
+                Button("打开系统登录项设置…") {
+                    LoginItemManager.openSystemSettings()
                 }
             }
-            .formStyle(.grouped)
-            .frame(width: 420, height: 280)
-            .padding()
+
+            Section("菜单栏") {
+                Toggle("精简模式（popover 仅快捷入口）", isOn: $menuBarCompact)
+                    .onChange(of: menuBarCompact) { _, value in
+                        TermDeskSettings.menuBarCompact = value
+                    }
+            }
+
+            Section("采样") {
+                Toggle("优先 SysPeek 快照（过期时不自行采样）", isOn: $preferSysPeek)
+                    .onChange(of: preferSysPeek) { _, value in
+                        TermDeskSettings.preferSysPeekSnapshot = value
+                    }
+            }
+
+            Section("快捷键") {
+                Text("⌘⇧` 打开/关闭悬浮控制台")
+                    .font(.caption)
+            }
+
+            Section("数据") {
+                Text("~/Library/Application Support/TermDesk/snapshot.json")
+                    .font(.caption2)
+                    .foregroundStyle(.secondary)
+            }
+
+            Section("关联") {
+                Button("打开 QR Web") {
+                    NSWorkspace.shared.open(URL(string: "http://127.0.0.1:8765")!)
+                }
+                Button("打开悬浮控制台") {
+                    FloatingPanelController.shared.attach(store: store)
+                    FloatingPanelController.shared.show()
+                }
+            }
+        }
+        .formStyle(.grouped)
+        .frame(width: 460, height: 420)
+        .padding()
+        .onAppear {
+            loginItemEnabled = LoginItemManager.isEnabled
+            loginItemStatus = LoginItemManager.status.label
+        }
+    }
+
+    private func updateLoginItem(enabled: Bool) {
+        do {
+            try LoginItemManager.setEnabled(enabled)
+            loginItemError = nil
+            loginItemEnabled = LoginItemManager.isEnabled
+            loginItemStatus = LoginItemManager.status.label
+        } catch {
+            loginItemError = error.localizedDescription
+            loginItemEnabled = LoginItemManager.isEnabled
         }
     }
 }

@@ -12,7 +12,9 @@ git clone https://github.com/Jiaqingrun/SysPeek.git syspeek
 git clone https://github.com/Jiaqingrun/TermDesk.git term-desk
 cd term-desk
 swift build -c release
-.build/release/TermDesk
+# 或打包为 App
+./scripts/package-app.sh
+open TermDesk.app
 ```
 
 ## 运行（本机已有仓库）

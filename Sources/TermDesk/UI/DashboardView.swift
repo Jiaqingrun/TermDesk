@@ -14,7 +14,7 @@ struct DashboardView: View {
                 .padding(.bottom, 14)
         }
         .background(TermDeskTheme.panelBackground)
-        .termDeskPanelFrame(width: compact ? 380 : 440)
+        .menuBarPanelFrame(width: compact ? 380 : 440)
     }
 
     private var header: some View {
@@ -126,7 +126,9 @@ struct SysTabView: View {
                     }
                 }
             } else {
-                Text("等待 SysPeek 或本地采样…")
+                Text(TermDeskSettings.preferSysPeekSnapshot
+                     ? "等待 SysPeek 快照（可在设置关闭「优先 SysPeek」以本地采样）"
+                     : "等待 SysPeek 或本地采样…")
                     .font(TermDeskTheme.monoSmall)
                     .foregroundStyle(TermDeskTheme.muted)
             }

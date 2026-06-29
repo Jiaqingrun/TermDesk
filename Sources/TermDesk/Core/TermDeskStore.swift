@@ -61,6 +61,8 @@ final class TermDeskStore: ObservableObject {
             return SysSnapshotBridge.fromWidget(widget)
         }
 
+        guard !TermDeskSettings.preferSysPeekSnapshot else { return nil }
+
         let metrics = await sampler.sample(refreshInterval: interval, panelOpen: panelOpen)
         return SysSnapshotBridge.fromMetrics(metrics)
     }
