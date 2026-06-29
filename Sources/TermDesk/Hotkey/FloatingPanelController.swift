@@ -8,7 +8,7 @@ final class HotkeyManager {
     var onTogglePanel: (() -> Void)?
 
     private var hotKeyRef: EventHotKeyRef?
-    private let hotKeyID = EventHotKeyID(signature: OSType(0x5444_534B), id: 1) // "TDSK"
+    private let hotKeyID = EventHotKeyID(signature: OSType(0x5444_534B), id: 1)
     private var eventHandlerRef: EventHandlerRef?
 
     private init() {}
@@ -27,7 +27,6 @@ final class HotkeyManager {
         )
         guard status == noErr else { return }
 
-        // ⌘⇧` (backtick)
         let registerStatus = RegisterEventHotKey(
             UInt32(kVK_ANSI_Grave),
             UInt32(cmdKey | shiftKey),
@@ -104,9 +103,17 @@ final class FloatingPanelController: NSObject {
     func show() {
         let panel = panel ?? makePanel()
         self.panel = panel
+        applyBehavior(to: panel)
+        applyEdgeSnap(to: panel)
         store?.panelOpen = true
         panel.makeKeyAndOrderFront(nil)
         NSApp.activate(ignoringOtherApps: true)
+    }
+
+    func refreshBehavior() {
+        guard let panel else { return }
+        applyBehavior(to: panel)
+        applyEdgeSnap(to: panel)
     }
 
     private func makePanel() -> NSPanel {
@@ -126,8 +133,34 @@ final class FloatingPanelController: NSObject {
         panel.isOpaque = false
         panel.hasShadow = true
         panel.contentViewController = hosting
-        panel.center()
         panel.setFrameAutosaveName("TermDeskFloatingPanel")
+        applyEdgeSnap(to: panel)
         return panel
+    }
+
+    private func applyBehavior(to panel: NSPanel) {
+        let pinned = TermDeskSettings.floatingPinned
+        panel.hidesOnDeactivate = !pinned
+        panel.isMovableByWindowBackground = !pinned || TermDeskSettings.floatingEdge == "free"
+    }
+
+    private func applyEdgeSnap(to panel: NSPanel) {
+        guard TermDeskSettings.floatingEdge != "free",
+              let screen = NSScreen.main ?? NSScreen.screens.first else { return }
+
+        let visible = screen.visibleFrame
+        var frame = panel.frame
+        frame.size.width = max(frame.width, 440)
+        frame.size.height = max(frame.height, 520)
+        frame.origin.y = visible.midY - frame.height / 2
+
+        switch TermDeskSettings.floatingEdge {
+        case "left":
+            frame.origin.x = visible.minX + 12
+        default:
+            frame.origin.x = visible.maxX - frame.width - 12
+        }
+
+        panel.setFrame(frame, display: true)
     }
 }

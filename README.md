@@ -32,6 +32,12 @@ swift build -c release
 | 悬浮控制台 | `⌘⇧\`` |
 | 菜单栏面板 | 点击菜单栏终端图标 |
 
+## v0.3 新增
+
+- **QR Tab**：优先 `qr doctor --json`，失败时回退文本解析
+- **悬浮窗**：设置 → 钉住 / 贴边（右 · 左 · 自由）
+- **Pi 屏**：mac-dashboard-agent 推送 `termdesk` 字段，外接屏显示 QR · SYS · Fleet
+
 ## 依赖
 
 - **SysPeek**（同级目录 `../syspeek`，[GitHub](https://github.com/Jiaqingrun/SysPeek)）：提供 QRMetricsKit / SysPeekShared；运行 SysPeek 时可读 `widget-snapshot.json`，避免双份采样

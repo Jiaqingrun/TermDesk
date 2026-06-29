@@ -17,4 +17,16 @@ enum TermDeskSettings {
         }
         set { defaults.set(newValue, forKey: "termdesk.preferSysPeek") }
     }
+
+    /// 悬浮窗贴边：free / right / left
+    static var floatingEdge: String {
+        get { defaults.string(forKey: "termdesk.floatingEdge") ?? "right" }
+        set { defaults.set(newValue, forKey: "termdesk.floatingEdge") }
+    }
+
+    /// 钉住后关闭时仅隐藏，保持位置；且不在失焦时自动隐藏。
+    static var floatingPinned: Bool {
+        get { defaults.bool(forKey: "termdesk.floatingPinned") }
+        set { defaults.set(newValue, forKey: "termdesk.floatingPinned") }
+    }
 }

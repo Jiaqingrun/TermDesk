@@ -16,7 +16,62 @@ enum QRBridge {
         )
     }
 
+    private struct DoctorJSON: Decodable {
+        var ok: Bool
+        var issue_count: Int
+        var ok_items: [String]
+        var issues: [DoctorIssue]
+    }
+
+    private struct DoctorIssue: Decodable {
+        var area: String
+        var level: String
+        var message: String
+    }
+
     private static func runDoctor() -> (issueCount: Int, lines: [String]) {
+        if let parsed = runDoctorJSON() {
+            return parsed
+        }
+        return runDoctorText()
+    }
+
+    private static func runDoctorJSON() -> (issueCount: Int, lines: [String])? {
+        let pipe = Pipe()
+        let process = Process()
+        if let qrPath = resolveQRPath() {
+            process.executableURL = URL(fileURLWithPath: qrPath)
+            process.arguments = ["doctor", "--json"]
+        } else {
+            process.executableURL = URL(fileURLWithPath: "/usr/bin/env")
+            process.arguments = ["qr", "doctor", "--json"]
+        }
+        process.environment = (ProcessInfo.processInfo.environment).merging(["NO_COLOR": "1"]) { _, new in new }
+        process.standardOutput = pipe
+        process.standardError = pipe
+
+        do {
+            try process.run()
+        } catch {
+            return nil
+        }
+        process.waitUntilExit()
+        guard process.terminationStatus == 0 || process.terminationStatus == 1 else { return nil }
+
+        let data = pipe.fileHandleForReading.readDataToEndOfFile()
+        guard let decoded = try? JSONDecoder().decode(DoctorJSON.self, from: data) else { return nil }
+
+        var lines = decoded.ok_items.prefix(6).map { "✓ \($0)" }
+        if lines.isEmpty && !decoded.issues.isEmpty {
+            lines = decoded.issues.prefix(4).map { issue in
+                let mark = issue.level == "warn" ? "!" : "·"
+                return "\(mark) [\(issue.area)] \(issue.message)"
+            }
+        }
+        return (decoded.issue_count, Array(lines))
+    }
+
+    private static func runDoctorText() -> (issueCount: Int, lines: [String]) {
         let pipe = Pipe()
         let process = Process()
         if let qrPath = resolveQRPath() {
@@ -52,7 +107,7 @@ enum QRBridge {
                 let cells = text.split(separator: "│", omittingEmptySubsequences: false).map {
                     String($0).trimmingCharacters(in: .whitespaces)
                 }
-                if cells.count >= 2, cells[1] == "warn" {
+                if cells.count >= 2, cells[1] == "warn" || cells[1] == "error" {
                     issueCount += 1
                 }
             }

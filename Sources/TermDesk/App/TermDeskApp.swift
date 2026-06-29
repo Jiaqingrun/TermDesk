@@ -34,6 +34,8 @@ struct TermDeskApp: App {
     @StateObject private var store = TermDeskStore()
     @AppStorage("termdesk.menuBarCompact") private var menuBarCompact = TermDeskSettings.menuBarCompact
     @AppStorage("termdesk.preferSysPeek") private var preferSysPeek = TermDeskSettings.preferSysPeekSnapshot
+    @AppStorage("termdesk.floatingPinned") private var floatingPinned = TermDeskSettings.floatingPinned
+    @AppStorage("termdesk.floatingEdge") private var floatingEdge = TermDeskSettings.floatingEdge
 
     var body: some Scene {
         MenuBarExtra {
@@ -54,7 +56,13 @@ struct TermDeskApp: App {
         .menuBarExtraStyle(.window)
 
         Settings {
-            SettingsView(store: store, menuBarCompact: $menuBarCompact, preferSysPeek: $preferSysPeek)
+            SettingsView(
+                store: store,
+                menuBarCompact: $menuBarCompact,
+                preferSysPeek: $preferSysPeek,
+                floatingPinned: $floatingPinned,
+                floatingEdge: $floatingEdge
+            )
         }
     }
 
@@ -102,9 +110,17 @@ private struct SettingsView: View {
     @ObservedObject var store: TermDeskStore
     @Binding var menuBarCompact: Bool
     @Binding var preferSysPeek: Bool
+    @Binding var floatingPinned: Bool
+    @Binding var floatingEdge: String
     @State private var loginItemEnabled = LoginItemManager.isEnabled
     @State private var loginItemStatus = LoginItemManager.status.label
     @State private var loginItemError: String?
+
+    private let edgeOptions = [
+        ("right", "贴右边缘"),
+        ("left", "贴左边缘"),
+        ("free", "自由拖动"),
+    ]
 
     var body: some View {
         Form {
@@ -129,6 +145,23 @@ private struct SettingsView: View {
                     .onChange(of: menuBarCompact) { _, value in
                         TermDeskSettings.menuBarCompact = value
                     }
+            }
+
+            Section("悬浮窗") {
+                Toggle("钉住（失焦不自动隐藏）", isOn: $floatingPinned)
+                    .onChange(of: floatingPinned) { _, value in
+                        TermDeskSettings.floatingPinned = value
+                        FloatingPanelController.shared.refreshBehavior()
+                    }
+                Picker("贴边", selection: $floatingEdge) {
+                    ForEach(edgeOptions, id: \.0) { value, label in
+                        Text(label).tag(value)
+                    }
+                }
+                .onChange(of: floatingEdge) { _, value in
+                    TermDeskSettings.floatingEdge = value
+                    FloatingPanelController.shared.refreshBehavior()
+                }
             }
 
             Section("采样") {
@@ -160,7 +193,7 @@ private struct SettingsView: View {
             }
         }
         .formStyle(.grouped)
-        .frame(width: 460, height: 420)
+        .frame(width: 460, height: 480)
         .padding()
         .onAppear {
             loginItemEnabled = LoginItemManager.isEnabled
